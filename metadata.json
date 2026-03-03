@@ -1,0 +1,7 @@
+{
+  "name": "Neeedy",
+  "description": "Premium electronics, chargers, TWS, and headphones. High-performance gadgets with AI assistance.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
