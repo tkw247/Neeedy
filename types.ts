@@ -113,6 +113,7 @@ export interface Campaign {
   endDate: string;
   couponCode: string;
   status: 'active' | 'inactive';
+  image?: string;
   performance: {
     uses: number;
     revenue: number;

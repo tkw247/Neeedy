@@ -26,11 +26,14 @@ interface AppContextType {
   login: (email: string, password?: string) => Promise<void>;
   register: (name: string, email: string, password?: string) => Promise<void>;
   logout: () => void;
-  updateUser: (data: Partial<User>) => void;
+  updateUser: (data: Partial<User>) => Promise<void>;
   toggleDarkMode: () => void;
   createOrder: (details: any, paymentMethod: string, bkashReference?: string) => Promise<void>;
+  updateOrder: (orderId: string, data: any) => Promise<void>;
+  deleteOrder: (orderId: string) => Promise<void>;
   
   // Admin Actions
+  adminUpdateCredentials: (data: any) => Promise<void>;
   adminUpdateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
   adminAddProduct: (product: any) => Promise<void>;
   adminDeleteProduct: (productId: string) => Promise<void>;
@@ -50,6 +53,9 @@ interface AppContextType {
   adminUpdateLandingPage: (page: any) => Promise<void>;
   adminDeleteLandingPage: (pageId: string) => Promise<void>;
   refreshStats: () => Promise<any>;
+  adminUsers: User[];
+  adminGetUsers: () => Promise<void>;
+  adminDeleteUser: (userId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -66,6 +72,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [landingPages, setLandingPages] = useState<LandingPage[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [adminUsers, setAdminUsers] = useState<User[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -98,6 +105,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ]);
         setOrders(await oRes.json());
         setAbandonedCarts(await acRes.json());
+      } else if (user?.role === 'customer') {
+        const oRes = await fetch(`/api/orders?userId=${user.id}`);
+        if (oRes.ok) setOrders(await oRes.json());
       }
     } catch (e) {
       console.error("Fetch error", e);
@@ -150,12 +160,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const clearCart = () => setCart([]);
 
-  const login = async (email: string, password?: string) => {
+  const login = async (identifier: string, password?: string) => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ identifier, password })
       });
       if (res.ok) {
         const loggedUser = await res.json();
@@ -171,12 +181,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const register = async (name: string, email: string, password?: string) => {
+  const register = async (name: string, email?: string, phone?: string, password?: string) => {
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ name, email, phone, password })
       });
       if (res.ok) {
         const newUser = await res.json();
@@ -195,15 +205,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    setOrders([]);
   };
 
-  const updateUser = (data: Partial<User>) => {
-    setUser(prev => {
-      if (!prev) return null;
-      const updated = { ...prev, ...data };
-      localStorage.setItem('user', JSON.stringify(updated));
-      return updated;
-    });
+  const updateUser = async (data: Partial<User>) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setUser(updated);
+        localStorage.setItem('user', JSON.stringify(updated));
+      }
+    } catch (e) {
+      console.error("Update user error", e);
+    }
   };
 
   const toggleDarkMode = () => {
@@ -242,7 +262,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const updateOrder = async (orderId: string, data: any) => {
+    const res = await fetch(`/api/orders/${orderId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (res.ok) fetchData();
+    else {
+      const err = await res.json();
+      alert(err.error || "Failed to update order");
+    }
+  };
+
+  const deleteOrder = async (orderId: string) => {
+    const res = await fetch(`/api/orders/${orderId}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) fetchData();
+    else {
+      const err = await res.json();
+      alert(err.error || "Failed to delete order");
+    }
+  };
+
   // Admin Actions
+  const adminUpdateCredentials = async (data: any) => {
+    const res = await fetch('/api/admin/credentials', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (res.ok) {
+      if (data.email && user) {
+        const updatedUser = { ...user, email: data.email };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+      alert("Admin credentials updated successfully");
+    }
+  };
   const adminUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
     await fetch(`/api/admin/orders/${orderId}/status`, {
       method: 'PUT',
@@ -386,18 +445,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return await res.json();
   };
 
+  const adminGetUsers = async () => {
+    const res = await fetch('/api/admin/users');
+    if (res.ok) {
+      setAdminUsers(await res.json());
+    }
+  };
+
+  const adminDeleteUser = async (userId: string) => {
+    await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    adminGetUsers();
+  };
+
   return (
     <AppContext.Provider value={{
       cart, wishlist, user, products, orders, sliders, categories, abandonedCarts, landingPages, campaigns, reviews, isDarkMode, isLoading,
       addToCart, removeFromCart, updateCartQuantity, toggleWishlist, clearCart,
-      login, register, logout, updateUser, toggleDarkMode, createOrder,
-      adminUpdateOrderStatus, adminAddProduct, adminDeleteProduct, adminUpdateProduct,
+      login, register, logout, updateUser, toggleDarkMode, createOrder, updateOrder, deleteOrder,
+      adminUpdateCredentials, adminUpdateOrderStatus, adminAddProduct, adminDeleteProduct, adminUpdateProduct,
       adminAddSlider, adminUpdateSlider, adminDeleteSlider, 
       adminAddCategory, adminUpdateCategory, adminDeleteCategory, 
       adminAddCampaign, adminUpdateCampaign, adminDeleteCampaign, 
       adminUpdateReview, adminDeleteReview, 
       adminAddLandingPage, adminUpdateLandingPage, adminDeleteLandingPage, 
-      refreshStats
+      refreshStats, adminUsers, adminGetUsers, adminDeleteUser
     }}>
       {children}
     </AppContext.Provider>

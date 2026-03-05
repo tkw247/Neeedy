@@ -47,7 +47,7 @@ const initialData = {
   campaigns: [],
   reviews: [],
   users: [
-    { id: 'admin-1', name: 'Admin', email: 'admin@purehub.com', role: 'admin' }
+    { id: 'admin-1', name: 'Admin', email: 'admin@purehub.com', password: 'purehub2026', role: 'admin' }
   ]
 };
 
@@ -115,12 +115,42 @@ async function startServer() {
   });
 
   // Orders
+  app.get("/api/orders", (req, res) => {
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ error: "UserId required" });
+    const userOrders = db.orders.filter((o: any) => o.userId === userId);
+    res.json(userOrders);
+  });
   app.get("/api/admin/orders", (req, res) => res.json(db.orders));
   app.post("/api/admin/orders", (req, res) => {
     const order = { ...req.body, id: `ORD-${Math.random().toString(36).toUpperCase().substr(2, 6)}` };
     db.orders.push(order);
     saveDb();
     res.json(order);
+  });
+  app.put("/api/orders/:id", (req, res) => {
+    const index = db.orders.findIndex((o: any) => o.id === req.params.id);
+    if (index !== -1) {
+      // Only allow editing if pending
+      if (db.orders[index].status !== 'pending') {
+        return res.status(400).json({ error: "Only pending orders can be edited" });
+      }
+      db.orders[index] = { ...db.orders[index], ...req.body };
+      saveDb();
+      res.json(db.orders[index]);
+    } else res.status(404).json({ error: "Not found" });
+  });
+  app.delete("/api/orders/:id", (req, res) => {
+    const index = db.orders.findIndex((o: any) => o.id === req.params.id);
+    if (index !== -1) {
+      // Only allow deleting if pending
+      if (db.orders[index].status !== 'pending') {
+        return res.status(400).json({ error: "Only pending orders can be deleted" });
+      }
+      db.orders = db.orders.filter((o: any) => o.id !== req.params.id);
+      saveDb();
+      res.json({ success: true });
+    } else res.status(404).json({ error: "Not found" });
   });
   app.put("/api/admin/orders/:id/status", (req, res) => {
     const index = db.orders.findIndex((o: any) => o.id === req.params.id);
@@ -238,13 +268,48 @@ async function startServer() {
   // Abandoned Carts
   app.get("/api/admin/abandoned-carts", (req, res) => res.json(db.abandonedCarts));
 
+  // Users Management
+  app.get("/api/admin/users", (req, res) => {
+    const usersWithoutPasswords = db.users.map(({ password, ...u }: any) => u);
+    res.json(usersWithoutPasswords);
+  });
+  app.put("/api/users/:id", (req, res) => {
+    const index = db.users.findIndex((u: any) => u.id === req.params.id);
+    if (index !== -1) {
+      const { password, ...otherData } = req.body;
+      db.users[index] = { ...db.users[index], ...otherData };
+      if (password) db.users[index].password = password;
+      saveDb();
+      const { password: _, ...userWithoutPassword } = db.users[index] as any;
+      res.json(userWithoutPassword);
+    } else res.status(404).json({ error: "Not found" });
+  });
+  app.put("/api/admin/credentials", (req, res) => {
+    const { email, password } = req.body;
+    const adminIndex = db.users.findIndex((u: any) => u.role === 'admin');
+    if (adminIndex !== -1) {
+      if (email) db.users[adminIndex].email = email;
+      if (password) db.users[adminIndex].password = password;
+      saveDb();
+      res.json({ success: true });
+    } else res.status(404).json({ error: "Admin not found" });
+  });
+  app.delete("/api/admin/users/:id", (req, res) => {
+    db.users = db.users.filter((u: any) => u.id !== req.params.id);
+    saveDb();
+    res.json({ success: true });
+  });
+
   // Auth
   app.post("/api/auth/register", (req, res) => {
-    const { email, name, password } = req.body;
-    if (db.users.find((u: any) => u.email === email)) {
-      return res.status(400).json({ error: "User already exists" });
+    const { email, phone, name, password } = req.body;
+    if (email && db.users.find((u: any) => u.email === email)) {
+      return res.status(400).json({ error: "Email already exists" });
     }
-    const user = { id: Math.random().toString(36).substr(2, 9), email, name, password, role: 'customer' };
+    if (phone && db.users.find((u: any) => u.phone === phone)) {
+      return res.status(400).json({ error: "Phone number already exists" });
+    }
+    const user = { id: Math.random().toString(36).substr(2, 9), email, phone, name, password, role: 'customer' };
     db.users.push(user);
     saveDb();
     const { password: _, ...userWithoutPassword } = user as any;
@@ -252,8 +317,8 @@ async function startServer() {
   });
 
   app.post("/api/auth/login", (req, res) => {
-    const { email, password } = req.body;
-    const user = db.users.find((u: any) => u.email === email && u.password === password);
+    const { identifier, password } = req.body; // identifier can be email or phone
+    const user = db.users.find((u: any) => (u.email === identifier || u.phone === identifier) && u.password === password);
     if (user) {
       const { password: _, ...userWithoutPassword } = user as any;
       res.json(userWithoutPassword);

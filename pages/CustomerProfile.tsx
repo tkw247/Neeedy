@@ -9,7 +9,8 @@ const CustomerProfile: React.FC = () => {
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
-    address: user?.address || ''
+    address: user?.address || '',
+    password: ''
   });
 
   if (!user) {
@@ -27,14 +28,18 @@ const CustomerProfile: React.FC = () => {
 
   const userOrders = orders.filter(o => o.userId === user.id || o.customerEmail === user.email);
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateUser(profileForm);
+    const updateData: any = { ...profileForm };
+    if (!updateData.password) delete updateData.password;
+    
+    await updateUser(updateData);
     alert('Profile updated successfully!');
+    setProfileForm(prev => ({ ...prev, password: '' }));
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar */}
         <div className="lg:col-span-1 space-y-6">
@@ -148,6 +153,15 @@ const CustomerProfile: React.FC = () => {
                       type="text" 
                       value={profileForm.phone}
                       onChange={e => setProfileForm({...profileForm, phone: e.target.value})}
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">New Password (leave blank to keep current)</label>
+                    <input 
+                      type="password" 
+                      value={profileForm.password}
+                      onChange={e => setProfileForm({...profileForm, password: e.target.value})}
                       className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold"
                     />
                   </div>

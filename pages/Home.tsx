@@ -7,7 +7,7 @@ import ProductCard from '../components/ui/ProductCard';
 import { ArrowRight, Cpu, Watch, Home as HomeIcon, ChevronRight, List } from 'lucide-react';
 
 const Home: React.FC = () => {
-  const { products, sliders, categories } = useApp();
+  const { products, sliders, categories, campaigns } = useApp();
   const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -127,8 +127,32 @@ const Home: React.FC = () => {
         </div>
       </div>
 
+      {/* Campaign Banners */}
+      {campaigns.filter(c => c.status === 'active' && c.image).length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-6">
+            {campaigns.filter(c => c.status === 'active' && c.image).map(cp => (
+              <div key={cp.id} className="relative h-24 md:h-32 rounded-[2rem] overflow-hidden shadow-lg group cursor-pointer">
+                <img src={cp.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={cp.name} />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex items-center px-8 md:px-12">
+                  <div>
+                    <h3 className="text-white text-xl md:text-2xl font-black uppercase tracking-tight">{cp.name}</h3>
+                    <p className="text-primary-400 font-black text-xs uppercase tracking-widest">Use Code: {cp.couponCode}</p>
+                  </div>
+                </div>
+                <div className="absolute right-8 md:right-12 top-1/2 -translate-y-1/2">
+                  <div className="bg-white text-slate-900 px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl group-hover:bg-primary-600 group-hover:text-white transition-all">
+                    Claim Offer
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Featured Products */}
-      <section className="max-w-7xl mx-auto px-4">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-end mb-8">
           <div>
             <h2 className="text-3xl font-black tracking-tight mb-1 uppercase">Featured Products</h2>
@@ -147,7 +171,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* All Products */}
-      <section className="max-w-7xl mx-auto px-4">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-end mb-8">
           <div>
             <h2 className="text-3xl font-black tracking-tight mb-1 uppercase">All Products</h2>

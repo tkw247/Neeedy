@@ -21,7 +21,7 @@ const ProductDetails: React.FC = () => {
 
   if (!product) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-32 text-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-32 text-center">
         <h2 className="text-3xl font-bold">Gadget not found</h2>
         <button onClick={() => navigate('/shop')} className="mt-8 px-8 py-3 bg-primary-600 text-white rounded-xl">Back to Shop</button>
       </div>
@@ -48,12 +48,12 @@ const ProductDetails: React.FC = () => {
         {/* Image Gallery */}
         <div className="space-y-6">
           <div className="aspect-square bg-slate-100 dark:bg-slate-900 rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-slate-800">
-            <img src={product.image} className="w-full h-full object-cover" alt={product.name} />
+            <img src={product.images[0]} className="w-full h-full object-cover" alt={product.name} />
           </div>
           <div className="grid grid-cols-4 gap-4">
-             {[1,2,3,4].map(i => (
+             {product.images.map((img, i) => (
                <div key={i} className="aspect-square bg-slate-100 dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 opacity-50 hover:opacity-100 cursor-pointer transition-opacity">
-                 <img src={product.image} className="w-full h-full object-cover" alt="" />
+                 <img src={img} className="w-full h-full object-cover" alt="" />
                </div>
              ))}
           </div>

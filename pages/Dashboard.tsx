@@ -9,22 +9,43 @@ import {
   Clock, Lock, X, LayoutDashboard, Image as ImageIcon, Layers, ShoppingCart, 
   Star, FileText, Megaphone, MessageSquare, Search, Filter, ChevronRight, 
   ArrowUpRight, ArrowDownRight, MoreVertical, Download, Mail, Eye, Save, 
-  PlusCircle, Trash, Check, AlertCircle, Settings, Globe, ShieldCheck, User, LogOut
+  PlusCircle, Trash, Check, AlertCircle, Settings, Globe, ShieldCheck, User, LogOut,
+  Copy, MapPin, Phone, Truck, RefreshCw
 } from 'lucide-react';
 import { ProductCategory, Product, Order, Slider, Category, Campaign, Review, LandingPage, AbandonedCart } from '../types';
 
 const Dashboard: React.FC = () => {
   const { 
-    user, products, orders, sliders, categories, abandonedCarts, landingPages, campaigns, reviews,
+    user, products, orders, sliders, categories, abandonedCarts, landingPages, campaigns, reviews, adminUsers,
     adminUpdateOrderStatus, adminAddProduct, adminDeleteProduct, adminUpdateProduct,
     adminAddSlider, adminUpdateSlider, adminDeleteSlider, adminAddCategory, adminUpdateCategory, adminDeleteCategory, adminAddCampaign, adminUpdateCampaign, adminDeleteCampaign, adminUpdateReview, adminAddLandingPage, adminUpdateLandingPage, adminDeleteLandingPage,
-    refreshStats, login
+    adminGetUsers, adminDeleteUser, adminUpdateCredentials,
+    refreshStats, login, deleteOrder
   } = useApp();
 
   const [activeSection, setActiveSection] = useState('overview');
   const [adminPassword, setAdminPassword] = useState('');
   const [stats, setStats] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
+  const [orderDateFilter, setOrderDateFilter] = useState('All');
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('Copied to clipboard!');
+  };
+
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    return `${Math.floor(diffInSeconds / 86400)} days ago`;
+  };
 
   // Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -33,6 +54,7 @@ const Dashboard: React.FC = () => {
 
   // Slider States (Moved to top level to fix Rules of Hooks)
   const [editingSlider, setEditingSlider] = useState<Slider | null>(null);
+  const [editingSlide, setEditingSlide] = useState<any | null>(null);
   const [newSlide, setNewSlide] = useState({ title: '', subtitle: '', buttonText: 'Shop Now', link: '#/shop', image: '' });
 
   // Product Form States (Moved to top level to fix Rules of Hooks)
@@ -47,7 +69,7 @@ const Dashboard: React.FC = () => {
 
   // Campaign Form States
   const [cpForm, setCpForm] = useState({
-    name: '', discountType: 'percentage' as 'percentage' | 'fixed', discountValue: '', startDate: '', endDate: '', couponCode: '', status: 'active' as 'active' | 'inactive'
+    name: '', discountType: 'percentage' as 'percentage' | 'fixed', discountValue: '', startDate: '', endDate: '', couponCode: '', status: 'active' as 'active' | 'inactive', image: ''
   });
 
   // Category Form States
@@ -55,9 +77,14 @@ const Dashboard: React.FC = () => {
     name: '', status: 'active' as 'active' | 'inactive', image: ''
   });
 
+  // Settings States
+  const [adminEmail, setAdminEmail] = useState(user?.email || '');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+
   useEffect(() => {
     if (user?.role === 'admin') {
       refreshStats().then(setStats);
+      adminGetUsers();
     }
   }, [user, orders, products]);
 
@@ -76,7 +103,7 @@ const Dashboard: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPassword === 'purehub2026') {
-      login('admin@purehub.com');
+      login('admin@purehub.com', 'purehub2026');
     } else {
       alert('Incorrect Hub Access Key');
     }
@@ -123,6 +150,8 @@ const Dashboard: React.FC = () => {
     { id: 'landing', label: 'Landing Pages', icon: Globe },
     { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
     { id: 'reviews', label: 'Review Management', icon: MessageSquare },
+    { id: 'users', label: 'User Database', icon: Users },
+    { id: 'settings', label: 'Hub Settings', icon: Settings },
   ];
 
   // --- RENDER SECTIONS ---
@@ -190,11 +219,12 @@ const Dashboard: React.FC = () => {
         startDate: cp.startDate.split('T')[0],
         endDate: cp.endDate.split('T')[0],
         couponCode: cp.couponCode,
-        status: cp.status
+        status: cp.status,
+        image: cp.image || ''
       });
     } else {
       setEditingItem(null);
-      setCpForm({ name: '', discountType: 'percentage', discountValue: '', startDate: '', endDate: '', couponCode: '', status: 'active' });
+      setCpForm({ name: '', discountType: 'percentage', discountValue: '', startDate: '', endDate: '', couponCode: '', status: 'active', image: '' });
     }
     setModalType('campaign');
     setIsModalOpen(true);
@@ -360,6 +390,18 @@ const Dashboard: React.FC = () => {
       }
     };
 
+    const handleUpdateSlide = () => {
+      if (editingSlider && editingSlide) {
+        const updatedSlider = {
+          ...editingSlider,
+          slides: editingSlider.slides.map(s => s.id === editingSlide.id ? editingSlide : s)
+        };
+        setEditingSlider(updatedSlider);
+        adminUpdateSlider(updatedSlider);
+        setEditingSlide(null);
+      }
+    };
+
     const handleDeleteSlide = (slideId: string) => {
       if (editingSlider) {
         const updatedSlider = {
@@ -426,7 +468,13 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end mt-6">
+                  <div className="flex justify-end mt-6 space-x-2">
+                    <button 
+                      onClick={() => setEditingSlide(slide)}
+                      className="p-3 bg-primary-50 text-primary-600 rounded-2xl hover:bg-primary-600 hover:text-white transition-all shadow-lg shadow-primary-500/10"
+                    >
+                      <Edit className="h-5 w-5" />
+                    </button>
                     <button 
                       onClick={() => handleDeleteSlide(slide.id)}
                       className="p-3 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-500/10"
@@ -499,55 +547,77 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm">
-            <h3 className="text-xl font-black uppercase tracking-tight mb-6">Add New Slide</h3>
+            <h3 className="text-xl font-black uppercase tracking-tight mb-6">
+              {editingSlide ? 'Edit Slide' : 'Add New Slide'}
+            </h3>
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Slide Image</label>
                 <label className="w-full aspect-video border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-all overflow-hidden relative">
-                  {newSlide.image ? (
-                    <img src={newSlide.image} className="w-full h-full object-cover" alt="" />
+                  {(editingSlide ? editingSlide.image : newSlide.image) ? (
+                    <img src={editingSlide ? editingSlide.image : newSlide.image} className="w-full h-full object-cover" alt="" />
                   ) : (
                     <>
                       <Plus className="h-6 w-6 text-slate-400 mb-1" />
                       <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">Upload Image</span>
                     </>
                   )}
-                  <input type="file" accept="image/*" onChange={handleImgUpload} className="hidden" />
+                  <input type="file" accept="image/*" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        if (editingSlide) setEditingSlide({...editingSlide, image: reader.result as string});
+                        else setNewSlide({...newSlide, image: reader.result as string});
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }} className="hidden" />
                 </label>
               </div>
               <input 
                 placeholder="Title" 
-                value={newSlide.title}
-                onChange={e => setNewSlide({ ...newSlide, title: e.target.value })}
+                value={editingSlide ? editingSlide.title : newSlide.title}
+                onChange={e => editingSlide ? setEditingSlide({...editingSlide, title: e.target.value}) : setNewSlide({ ...newSlide, title: e.target.value })}
                 className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold text-sm"
               />
               <input 
                 placeholder="Subtitle" 
-                value={newSlide.subtitle}
-                onChange={e => setNewSlide({ ...newSlide, subtitle: e.target.value })}
+                value={editingSlide ? editingSlide.subtitle : newSlide.subtitle}
+                onChange={e => editingSlide ? setEditingSlide({...editingSlide, subtitle: e.target.value}) : setNewSlide({ ...newSlide, subtitle: e.target.value })}
                 className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold text-sm"
               />
               <div className="grid grid-cols-2 gap-4">
                 <input 
                   placeholder="Button Text" 
-                  value={newSlide.buttonText}
-                  onChange={e => setNewSlide({ ...newSlide, buttonText: e.target.value })}
+                  value={editingSlide ? editingSlide.buttonText : newSlide.buttonText}
+                  onChange={e => editingSlide ? setEditingSlide({...editingSlide, buttonText: e.target.value}) : setNewSlide({ ...newSlide, buttonText: e.target.value })}
                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold text-sm"
                 />
                 <input 
                   placeholder="Link" 
-                  value={newSlide.link}
-                  onChange={e => setNewSlide({ ...newSlide, link: e.target.value })}
+                  value={editingSlide ? editingSlide.link : newSlide.link}
+                  onChange={e => editingSlide ? setEditingSlide({...editingSlide, link: e.target.value}) : setNewSlide({ ...newSlide, link: e.target.value })}
                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold text-sm"
                 />
               </div>
-              <button 
-                onClick={handleAddSlide}
-                disabled={!newSlide.image}
-                className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
-              >
-                Add Slide
-              </button>
+              <div className="flex space-x-2">
+                {editingSlide && (
+                  <button 
+                    onClick={() => setEditingSlide(null)}
+                    className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button 
+                  onClick={editingSlide ? handleUpdateSlide : handleAddSlide}
+                  disabled={editingSlide ? !editingSlide.image : !newSlide.image}
+                  className="flex-[2] py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  {editingSlide ? 'Update Slide' : 'Add Slide'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -588,59 +658,219 @@ const Dashboard: React.FC = () => {
     </div>
   );
 
-  const renderOrders = () => (
-    <div className="space-y-8 animate-in slide-in-from-bottom duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h2 className="text-3xl font-black uppercase tracking-tight">Order Management</h2>
-          <p className="text-slate-500 font-medium">Track, process, and fulfill customer gadget orders.</p>
-        </div>
-        <div className="flex space-x-4 w-full md:w-auto">
-          <div className="relative flex-1 md:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input type="text" placeholder="Search orders..." className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-bold outline-none focus:border-primary-500" />
-          </div>
-          <button className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:bg-slate-50 transition-all"><Filter className="h-5 w-5" /></button>
-        </div>
-      </div>
+  const renderOrders = () => {
+    const filteredOrders = (orders || []).filter(order => {
+      if (!order || !order.customerDetails || !order.items) return false;
+      
+      const matchesSearch = 
+        (order.customerDetails.fullName || '').toLowerCase().includes(orderSearch.toLowerCase()) ||
+        (order.customerDetails.phone || '').includes(orderSearch) ||
+        (order.customerDetails.address || '').toLowerCase().includes(orderSearch.toLowerCase()) ||
+        (order.id || '').toLowerCase().includes(orderSearch.toLowerCase());
+      
+      const matchesStatus = orderStatusFilter === 'All' || (order.status || '').toLowerCase() === orderStatusFilter.toLowerCase();
+      
+      // Basic date filter logic (can be expanded)
+      const matchesDate = orderDateFilter === 'All' || true; 
 
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
-              <tr>
-                <th className="px-8 py-4">Order Details</th>
-                <th className="px-8 py-4">Customer</th>
-                <th className="px-8 py-4">Payment</th>
-                <th className="px-8 py-4">Status</th>
-                <th className="px-8 py-4">Total</th>
-                <th className="px-8 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {orders.map(order => (
-                <tr key={order.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-8 py-6">
-                    <p className="font-black text-sm mb-1">{order.id}</p>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{new Date(order.createdAt).toLocaleDateString()}</p>
-                  </td>
-                  <td className="px-8 py-6">
-                    <p className="font-bold text-sm">{order.customerDetails.fullName || 'Guest'}</p>
-                    <p className="text-xs text-slate-400">{order.customerDetails.email}</p>
-                  </td>
-                  <td className="px-8 py-6">
-                    <p className="text-xs font-black uppercase tracking-widest">{order.paymentMethod}</p>
-                    {order.bkashReference && <p className="text-[10px] text-primary-600 font-black">REF: {order.bkashReference}</p>}
-                  </td>
-                  <td className="px-8 py-6">
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+
+    return (
+      <div className="space-y-8 animate-in slide-in-from-bottom duration-500 pb-20">
+        {/* Header Section */}
+        <div className="bg-gradient-to-r from-orange-600 to-orange-500 rounded-[2rem] p-10 text-white shadow-xl shadow-orange-500/20">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
+              <Package className="h-6 w-6 text-white" />
+            </div>
+            <h2 className="text-3xl font-black uppercase tracking-tight">অর্ডার ম্যানেজমেন্ট</h2>
+          </div>
+          <p className="text-orange-100 font-medium">কাস্টমার অর্ডার দেখুন এবং পরিচালনা করুন</p>
+        </div>
+
+        {/* Filters Section */}
+        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-end gap-6">
+          <div className="space-y-2 flex-1 min-w-[200px]">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">স্ট্যাটাস</label>
+            <select 
+              value={orderStatusFilter}
+              onChange={(e) => setOrderStatusFilter(e.target.value)}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-orange-500 font-bold appearance-none"
+            >
+              <option value="All">সব</option>
+              <option value="Pending">Pending</option>
+              <option value="Processing">Processing</option>
+              <option value="Shipped">Shipped</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div className="space-y-2 flex-1 min-w-[200px]">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">তারিখ</label>
+            <select 
+              value={orderDateFilter}
+              onChange={(e) => setOrderDateFilter(e.target.value)}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-orange-500 font-bold appearance-none"
+            >
+              <option value="All">All</option>
+              <option value="Today">Today</option>
+              <option value="Yesterday">Yesterday</option>
+              <option value="This Week">This Week</option>
+            </select>
+          </div>
+          <div className="space-y-2 flex-[2] min-w-[300px]">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">সার্চ করুন</label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="নাম / ফোন / ঠিকানা" 
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-orange-500 font-bold"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500">
+              পেজ 1 / 1 ({filteredOrders.length} আইটেম)
+            </div>
+            <button 
+              onClick={() => { setOrderSearch(''); setOrderStatusFilter('All'); setOrderDateFilter('All'); }}
+              className="px-6 py-4 bg-slate-200 dark:bg-slate-800 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-300 transition-all"
+            >
+              রিসেট
+            </button>
+          </div>
+        </div>
+
+        {/* Orders List */}
+        <div className="space-y-6">
+          {filteredOrders.map((order, index) => (
+            <div key={order.id} className="bg-[#FFFBEB] dark:bg-slate-900/50 rounded-[2.5rem] p-10 border border-orange-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                {/* Left Column: Customer Info */}
+                <div className="lg:col-span-1 flex flex-col items-center">
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-center w-full">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">সিরিয়াল</p>
+                    <p className="text-2xl font-black text-orange-600">#{index + 1}</p>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-4 space-y-4">
+                  {/* Customer Name */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 flex items-center gap-4">
+                    <div className="h-10 w-10 bg-orange-50 dark:bg-orange-900/20 rounded-xl flex items-center justify-center">
+                      <User className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">কাস্টমার নাম</p>
+                      <p className="font-bold text-slate-900 dark:text-white">{order.customerDetails.fullName}</p>
+                    </div>
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center">
+                        <Phone className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ফোন নম্বর</p>
+                        <p className="font-bold text-slate-900 dark:text-white">{order.customerDetails.phone}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => copyToClipboard(order.customerDetails.phone)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all">
+                      <Copy className="h-4 w-4 text-slate-400" />
+                    </button>
+                  </div>
+
+                  {/* Address */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl flex items-center justify-center">
+                          <MapPin className="h-5 w-5 text-emerald-600" />
+                        </div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ঠিকানা</p>
+                      </div>
+                      <button onClick={() => copyToClipboard(order.customerDetails.address)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all">
+                        <Copy className="h-4 w-4 text-slate-400" />
+                      </button>
+                    </div>
+                    <div className="space-y-2 pl-14">
+                      <div className="flex gap-2">
+                        <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-[10px] font-black uppercase text-slate-500">জেলা</span>
+                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">ঢাকা</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-[10px] font-black uppercase text-slate-500">থানা</span>
+                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">মিরপুর</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-[10px] font-black uppercase text-slate-500">ঠিকানা</span>
+                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-relaxed">{order.customerDetails.address}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Delivery Info */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">ডেলিভারি তথ্য</p>
+                    <p className="font-bold text-slate-900 dark:text-white">insideDhaka <span className="text-orange-600">৳70</span></p>
+                  </div>
+                </div>
+
+                {/* Middle Column: Product Info */}
+                <div className="lg:col-span-4 space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">প্রোডাক্ট লিস্ট</p>
+                  <div className="space-y-3">
+                    {order.items.map((item, i) => (
+                      <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 flex gap-4">
+                        <div className="h-16 w-16 bg-slate-50 dark:bg-slate-700 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100 dark:border-slate-600">
+                          <img src={item.images?.[0]} className="w-full h-full object-cover" alt="" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-black text-sm text-slate-900 dark:text-white truncate">{item.name}</h5>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs font-bold text-slate-500">৳{item.price}</span>
+                            <span className="text-xs font-bold text-slate-500">• পরিমাণ: {item.quantity}</span>
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">color: White</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">stock: 50</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Total Price */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border-2 border-orange-400 dark:border-orange-900 flex justify-between items-center">
+                    <p className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">মোট মূল্য</p>
+                    <p className="text-3xl font-black text-orange-600">৳{(order.total || 0).toLocaleString()}.00</p>
+                  </div>
+
+                  {/* Order Time */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 flex items-center gap-4">
+                    <div className="h-10 w-10 bg-slate-50 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">অর্ডার টাইম:</p>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{order.createdAt ? new Date(order.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-400 mt-0.5">{order.createdAt ? formatRelativeTime(order.createdAt) : ''}</p>
+                    </div>
+                  </div>
+
+                  {/* Status Dropdown */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">স্ট্যাটাস</p>
                     <select 
-                      value={order.status}
+                      value={order.status || 'pending'}
                       onChange={(e) => adminUpdateOrderStatus(order.id, e.target.value as any)}
-                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none border-none cursor-pointer ${
-                        order.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
-                        order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}
+                      className="w-full p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl outline-none border-2 border-orange-200 dark:border-orange-800 font-black text-xs uppercase tracking-widest text-orange-700 dark:text-orange-400 appearance-none"
                     >
                       <option value="pending">Pending</option>
                       <option value="processing">Processing</option>
@@ -648,22 +878,51 @@ const Dashboard: React.FC = () => {
                       <option value="delivered">Delivered</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
-                  </td>
-                  <td className="px-8 py-6 font-black text-sm">৳{order.total.toLocaleString()}</td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex justify-end space-x-2">
-                      <button onClick={() => { setModalType('order'); setEditingItem(order); setIsModalOpen(true); }} className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all"><Eye className="h-4 w-4" /></button>
-                      <button className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all"><Download className="h-4 w-4" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+
+                {/* Right Column: Actions */}
+                <div className="lg:col-span-3 flex flex-col gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">অ্যাকশন</p>
+                  <button onClick={() => { setModalType('order'); setEditingItem(order); setIsModalOpen(true); }} className="w-full py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-200 transition-all">
+                    <Eye className="h-4 w-4" /> বিস্তারিত দেখুন
+                  </button>
+                  <button className="w-full py-4 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-emerald-200 transition-all">
+                    <Truck className="h-4 w-4" /> কুরিয়ার প্রেস করুন
+                  </button>
+                  <button className="w-full py-4 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-200 transition-all">
+                    <RefreshCw className="h-4 w-4" /> স্ট্যাটাস চেক করুন
+                  </button>
+                  <button onClick={() => { if(window.confirm('অর্ডারটি ডিলিট করতে চান?')) deleteOrder(order.id); }} className="w-full py-4 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-red-200 transition-all">
+                    <Trash2 className="h-4 w-4" /> ডিলিট করুন
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {filteredOrders.length === 0 && (
+            <div className="py-20 text-center bg-white dark:bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
+              <Package className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+              <p className="text-slate-500 font-bold">কোন অর্ডার পাওয়া যায়নি।</p>
+            </div>
+          )}
+        </div>
+
+        {/* Pagination Footer */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-8">
+          <div className="bg-white dark:bg-slate-900 px-6 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            পেজ 1 / 1 — মোট {filteredOrders.length} অর্ডার
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 cursor-not-allowed">পূর্ববর্তী</button>
+            <div className="px-6 py-3 bg-white dark:bg-slate-900 border-2 border-orange-500 rounded-2xl text-[10px] font-black uppercase tracking-widest text-orange-600">1</div>
+            <button className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 cursor-not-allowed">পরবর্তী</button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAbandonedCarts = () => (
     <div className="space-y-8 animate-in slide-in-from-bottom duration-500">
@@ -952,9 +1211,16 @@ const Dashboard: React.FC = () => {
                 <Megaphone className="h-5 w-5" />
               </div>
             </div>
-            <div className="mb-8">
-              <h4 className="text-2xl font-black uppercase tracking-tight mb-1">{cp.name}</h4>
-              <p className="text-xs text-slate-400 font-bold">Ends on {new Date(cp.endDate).toLocaleDateString()}</p>
+            <div className="mb-8 flex items-center gap-6">
+              {cp.image && (
+                <div className="w-24 h-16 rounded-xl overflow-hidden shadow-md flex-shrink-0">
+                  <img src={cp.image} className="w-full h-full object-cover" alt="" />
+                </div>
+              )}
+              <div>
+                <h4 className="text-2xl font-black uppercase tracking-tight mb-1">{cp.name}</h4>
+                <p className="text-xs text-slate-400 font-bold">Ends on {new Date(cp.endDate).toLocaleDateString()}</p>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4 mb-8">
               <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl">
@@ -1050,6 +1316,112 @@ const Dashboard: React.FC = () => {
     </div>
   );
 
+  const renderUsers = () => (
+    <div className="space-y-8 animate-in slide-in-from-bottom duration-500">
+      <div>
+        <h2 className="text-3xl font-black uppercase tracking-tight">User Database</h2>
+        <p className="text-slate-500 font-medium">Manage and control all registered hub members.</p>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <tr>
+                <th className="px-8 py-4">User Info</th>
+                <th className="px-8 py-4">Contact</th>
+                <th className="px-8 py-4">Role</th>
+                <th className="px-8 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {adminUsers.map(u => (
+                <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="h-10 w-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center font-black text-primary-600">
+                        {u.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">{u.name}</p>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">ID: {u.id}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6">
+                    <p className="text-sm font-medium">{u.email || 'No Email'}</p>
+                    <p className="text-xs text-slate-400">{u.phone || 'No Phone'}</p>
+                  </td>
+                  <td className="px-8 py-6">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                      u.role === 'admin' ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    {u.role !== 'admin' && (
+                      <button 
+                        onClick={() => { if(confirm('Remove this user?')) adminDeleteUser(u.id); }}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSettings = () => {
+    const handleUpdateCredentials = async (e: React.FormEvent) => {
+      e.preventDefault();
+      await adminUpdateCredentials({ email: adminEmail, password: newAdminPassword });
+      setNewAdminPassword('');
+    };
+
+    return (
+      <div className="max-w-2xl space-y-8 animate-in slide-in-from-bottom duration-500">
+        <div>
+          <h2 className="text-3xl font-black uppercase tracking-tight mb-1">Hub Settings</h2>
+          <p className="text-slate-500 font-medium">Manage administrative credentials and security.</p>
+        </div>
+
+        <form onSubmit={handleUpdateCredentials} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Admin Email</label>
+            <input 
+              type="email" 
+              value={adminEmail}
+              onChange={e => setAdminEmail(e.target.value)}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">New Master Password</label>
+            <input 
+              type="password" 
+              value={newAdminPassword}
+              onChange={e => setNewAdminPassword(e.target.value)}
+              placeholder="Leave blank to keep current"
+              className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold"
+            />
+          </div>
+          <div className="pt-4">
+            <button type="submit" className="flex items-center gap-2 px-8 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary-500/20 hover:scale-105 transition-all">
+              <Save className="h-4 w-4" /> Update Credentials
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex">
       {/* Sidebar */}
@@ -1110,6 +1482,8 @@ const Dashboard: React.FC = () => {
           {activeSection === 'landing' && renderLandingPages()}
           {activeSection === 'campaigns' && renderCampaigns()}
           {activeSection === 'reviews' && renderReviews()}
+          {activeSection === 'users' && renderUsers()}
+          {activeSection === 'settings' && renderSettings()}
         </div>
       </main>
 
@@ -1205,6 +1579,34 @@ const Dashboard: React.FC = () => {
                 {modalType === 'campaign' && (
                   <div className="space-y-4">
                     <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Campaign Banner (Long & Thin)</label>
+                      <label className="w-full h-24 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-all overflow-hidden relative">
+                        {cpForm.image ? (
+                          <img src={cpForm.image} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                          <>
+                            <Plus className="h-6 w-6 text-slate-400 mb-1" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">Upload Banner</span>
+                          </>
+                        )}
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setCpForm(prev => ({ ...prev, image: reader.result as string }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }} 
+                          className="hidden" 
+                        />
+                      </label>
+                    </div>
+                    <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Campaign Name</label>
                       <input value={cpForm.name} onChange={e => setCpForm({...cpForm, name: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold" />
                     </div>
@@ -1254,8 +1656,32 @@ const Dashboard: React.FC = () => {
                       <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Category Image URL</label>
-                      <input value={catForm.image} onChange={e => setCatForm({...catForm, image: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none border-2 border-transparent focus:border-primary-500 font-bold" />
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Category Icon/Image</label>
+                      <label className="w-full h-32 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-all overflow-hidden relative">
+                        {catForm.image ? (
+                          <img src={catForm.image} className="w-full h-full object-contain" alt="" />
+                        ) : (
+                          <>
+                            <Plus className="h-6 w-6 text-slate-400 mb-1" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">Upload Icon</span>
+                          </>
+                        )}
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setCatForm(prev => ({ ...prev, image: reader.result as string }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }} 
+                          className="hidden" 
+                        />
+                      </label>
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status</label>

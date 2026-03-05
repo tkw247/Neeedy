@@ -6,7 +6,9 @@ import { Mail, Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
 const Auth: React.FC = () => {
   const { login, register } = useApp();
   const [isLogin, setIsLogin] = useState(true);
+  const [identifier, setIdentifier] = useState(''); // email or phone for login
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
 
@@ -14,9 +16,9 @@ const Auth: React.FC = () => {
     e.preventDefault();
     try {
       if (isLogin) {
-        await login(email, password);
+        await login(identifier, password);
       } else {
-        await register(name, email, password);
+        await register(name, email || undefined, phone || undefined, password);
       }
       window.location.hash = '#/';
     } catch (error) {
@@ -41,30 +43,54 @@ const Auth: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
+              <>
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Full Name" 
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary-500" 
+                  />
+                </div>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <input 
+                    type="email" 
+                    placeholder="Email Address (Optional)" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary-500" 
+                  />
+                </div>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 font-bold flex items-center justify-center text-xs">#</div>
+                  <input 
+                    type="tel" 
+                    placeholder="Phone Number (Optional)" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary-500" 
+                  />
+                </div>
+              </>
+            )}
+            
+            {isLogin && (
               <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                 <input 
                   type="text" 
-                  placeholder="Full Name" 
+                  placeholder="Email or Phone Number" 
                   required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary-500" 
                 />
               </div>
             )}
-            
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <input 
-                type="email" 
-                placeholder="Email Address" 
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary-500" 
-              />
-            </div>
 
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
